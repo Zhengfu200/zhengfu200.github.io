@@ -1,0 +1,55 @@
+name: Fetch Open Issues
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # 每小时在0分执行（UTC时间）
+
+jobs:
+  fetch-open-issues:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: read    # 授予读取issue的权限
+      contents: write  # 如果需要上传artifact需要写权限
+    
+    steps:
+    - name: Fetch and process issues
+      uses: actions/github-script@v6
+      id: fetch-issues
+      with:
+        script: |
+          const fs = require('fs');
+          const { data: issues } = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            state: 'open'
+          });
+
+          // 过滤掉Pull Request（GitHub API返回的issues包含PR）
+          const issuesOnly = issues.filter(issue => !issue.pull_request);
+          
+          // 构造输出内容
+          let output = `📅 未关闭Issue统计（${new Date().toUTCString()}）\n\n`;
+          issuesOnly.forEach(issue => {
+            output += `🆔 Issue #${issue.number}\n`;
+            output += `📛 标题: ${issue.title}\n`;
+            output += `👤 提交者: ${issue.user.login}\n`;
+            output += `📝 内容:\n${issue.body}\n`;
+            output += `🔗 链接: ${issue.html_url}\n`;
+            output += '――――――――――――――――――――――――――\n\n';
+          });
+
+          // 写入文件
+          fs.writeFileSync('open-issues.txt', output);
+          
+          // 输出到控制台
+          console.log(output);
+
+          // 设置输出变量供后续步骤使用
+          return output;
+
+    - name: Upload issues as artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: open-issues-report
+        path: |
+          open-issues.txt
